@@ -12,8 +12,11 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  flutter_bluetooth_serial_plus: ^0.5.1
-  flutter_blue_plus: ^2.2.1
+  # Modified to use local versions with fixes/persistence
+  flutter_bluetooth_serial_plus:
+    path: ./packages/flutter_bluetooth_serial_plus-0.5.1
+  flutter_blue_plus:
+    path: ./packages/flutter_blue_plus-2.2.1
   permission_handler: ^11.3.1
   geolocator: ^13.0.1
 
