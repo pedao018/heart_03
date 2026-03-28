@@ -21,3 +21,22 @@ samples, guidance on mobile development, and a full API reference.
 - Fix "flutter_bluetooth_serial_plus: ^0.5.1" error jCenter: 
 View "Project" -> "External Libraries" -> "Flutter Plugins" -> "flutter_bluetooth_serial_plus-0.5.1" -> "build.gradle" -> replace "jCenter" to "mavenCentral()"
 <img width="1306" height="675" alt="image" src="https://github.com/user-attachments/assets/73a78fd4-37fa-4a44-a211-c4c1b88b5ef9" />
+
+
+- Fix "flutter_blue_plus: ^2.2.1":
+  <img width="1177" height="648" alt="image" src="https://github.com/user-attachments/assets/a492adad-d69a-4e81-9db3-7aad830fe705" />
+
+  buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+
+}
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
