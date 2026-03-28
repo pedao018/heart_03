@@ -1,8 +1,6 @@
 name: heart_03
 description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -17,6 +15,7 @@ dependencies:
   flutter_bluetooth_serial_plus: ^0.5.1
   flutter_blue_plus: ^2.2.1
   permission_handler: ^11.3.1
+  geolocator: ^13.0.1
 
 dev_dependencies:
   flutter_test:

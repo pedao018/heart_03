@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_bluetooth_serial_plus/flutter_bluetooth_serial_plus.dart
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:heart_03/utils/utils.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 
 class DiscoveredDevice {
   final String name;
@@ -71,24 +73,48 @@ class _ClientPageState extends State<ClientPage> {
   }
 
   Future<void> _checkPermissions() async {
-    await [
+    Map<Permission, PermissionStatus> statuses = await [
       Permission.bluetooth,
       Permission.bluetoothConnect,
       Permission.bluetoothScan,
       Permission.location,
       Permission.bluetoothAdvertise,
     ].request();
-    _checkBluetoothStatus();
+
+    if (statuses[Permission.bluetoothConnect]?.isGranted ?? false) {
+      _checkHardwareStatus();
+    }
   }
 
-  Future<void> _checkBluetoothStatus() async {
+  Future<void> _checkHardwareStatus() async {
+    // 1. Check Bluetooth
     classic.BluetoothState state = await classic.FlutterBluetoothSerial.instance.state;
     if (state == classic.BluetoothState.STATE_OFF) {
       await classic.FlutterBluetoothSerial.instance.requestEnable();
     }
+
+    // 2. Check Location (GPS) - Required for Android 12+ discovery
+    if (Platform.isAndroid) {
+      bool isLocationEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!isLocationEnabled) {
+        Utils.instance.printLogs(_tag, "Location is OFF. Requesting GPS...");
+        // Show dialog or open settings
+        await Geolocator.openLocationSettings();
+      }
+    }
   }
 
   void _startDiscovery() async {
+    // Re-check hardware before starting
+    bool isLocationEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!isLocationEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please turn on GPS/Location to scan for devices.")),
+      );
+      await Geolocator.openLocationSettings();
+      return;
+    }
+
     setState(() {
       isDiscovering = true;
       results.clear();
@@ -99,6 +125,7 @@ class _ClientPageState extends State<ClientPage> {
 
     // 1. Classic Discovery (HC-05)
     _classicSubscription = classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
+      Utils.instance.printLogs(_tag, "Classic: ${r.device.name} [${r.device.address}]");
       _addDevice(DiscoveredDevice(
         name: r.device.name ?? "Unknown Classic",
         address: r.device.address,
@@ -134,7 +161,6 @@ class _ClientPageState extends State<ClientPage> {
   }
 
   void _addDevice(DiscoveredDevice device) {
-    Utils.instance.printLogs(_tag, "_addDevice: $device");
     setState(() {
       final idx = results.indexWhere((d) => d.address == device.address);
       if (idx >= 0) {
@@ -222,7 +248,7 @@ class _ClientPageState extends State<ClientPage> {
                 itemBuilder: (context, i) {
                   final d = results[i];
                   return ListTile(
-                    leading: Icon(d.isBle ? Icons.bluetooth_audio : Icons.bluetooth, color: d.isBle ? Colors.blue : Colors.grey),
+                    leading: Icon(Icons.bluetooth, color: d.isBle ? Colors.green : Colors.blue),
                     title: Text(d.name),
                     subtitle: Text("${d.address} | ${d.isBle ? 'BLE' : 'Classic'}"),
                     trailing: Text("${d.rssi} dBm"),
