@@ -18,6 +18,6 @@ samples, guidance on mobile development, and a full API reference.
 
 
 
-Fix "flutter_bluetooth_serial_plus: ^0.5.1" error jCenter: 
+- Fix "flutter_bluetooth_serial_plus: ^0.5.1" error jCenter: 
 View "Project" -> "External Libraries" -> "Flutter Plugins" -> "flutter_bluetooth_serial_plus-0.5.1" -> "build.gradle" -> replace "jCenter" to "mavenCentral()"
 <img width="1306" height="675" alt="image" src="https://github.com/user-attachments/assets/73a78fd4-37fa-4a44-a211-c4c1b88b5ef9" />
