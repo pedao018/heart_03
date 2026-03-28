@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial_plus/flutter_bluetooth_serial_plus.dart' as classic;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:heart_03/utils/utils.dart';
@@ -32,16 +32,19 @@ class ClientApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Heart Measure Demo',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen)),
-      home: const ClientPage(title: 'Heart Measure - Client'),
+      title: 'Bluetooth App',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const ClientPage(title: 'Bluetooth Scanner'),
     );
   }
 }
 
 class ClientPage extends StatefulWidget {
   const ClientPage({super.key, required this.title});
-
   final String title;
 
   @override
@@ -49,13 +52,14 @@ class ClientPage extends StatefulWidget {
 }
 
 class _ClientPageState extends State<ClientPage> {
-  classic.BluetoothConnection? connection;
+  classic.BluetoothConnection? _connection;
   String _receivedData = "";
   bool isConnecting = false;
   bool isDiscovering = false;
-  final String _tag = "ClientPageState";
+  bool hasSearched = false;
+  String? connectedDeviceName;
 
-  final String _targetDeviceName = "HC-05";
+  final String _tag = "ClientPageState";
   final Duration _discoveryTimeout = const Duration(seconds: 30);
 
   StreamSubscription<classic.BluetoothDiscoveryResult>? _classicSubscription;
@@ -64,68 +68,86 @@ class _ClientPageState extends State<ClientPage> {
 
   List<DiscoveredDevice> results = [];
 
-  bool get isConnected => (connection?.isConnected ?? false);
+  bool get isConnected => (_connection?.isConnected ?? false);
 
   @override
   void initState() {
     super.initState();
-    _checkPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPermissions());
   }
 
+  // --- 1. Permission Logic ---
   Future<void> _checkPermissions() async {
     Map<Permission, PermissionStatus> statuses = await [
-      Permission.bluetooth,
-      Permission.bluetoothConnect,
       Permission.bluetoothScan,
+      Permission.bluetoothConnect,
       Permission.location,
-      Permission.bluetoothAdvertise,
     ].request();
 
-    if (statuses[Permission.bluetoothConnect]?.isGranted ?? false) {
+    bool allGranted = statuses.values.every((status) => status.isGranted);
+
+    if (!allGranted) {
+      _showPermissionDialog();
+    } else {
       _checkHardwareStatus();
     }
   }
 
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Permissions Required"),
+        content: const Text("You can't use the app if permission is not granted"),
+        actions: [
+          TextButton(
+            onPressed: () => SystemNavigator.pop(), // Exit App
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _checkPermissions(); // Request again
+            },
+            child: const Text("Agree"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _checkHardwareStatus() async {
-    // 1. Check Bluetooth
     classic.BluetoothState state = await classic.FlutterBluetoothSerial.instance.state;
     if (state == classic.BluetoothState.STATE_OFF) {
       await classic.FlutterBluetoothSerial.instance.requestEnable();
     }
-
-    // 2. Check Location (GPS) - Required for Android 12+ discovery
     if (Platform.isAndroid) {
       bool isLocationEnabled = await Geolocator.isLocationServiceEnabled();
       if (!isLocationEnabled) {
-        Utils.instance.printLogs(_tag, "Location is OFF. Requesting GPS...");
-        // Show dialog or open settings
         await Geolocator.openLocationSettings();
       }
     }
   }
 
+  // --- 2. Scanning Logic ---
   void _startDiscovery() async {
-    // Re-check hardware before starting
-    bool isLocationEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!isLocationEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please turn on GPS/Location to scan for devices.")),
-      );
-      await Geolocator.openLocationSettings();
-      return;
-    }
+    if (isDiscovering || isConnecting || isConnected) return;
 
     setState(() {
       isDiscovering = true;
+      hasSearched = false;
       results.clear();
     });
 
     _discoveryTimer?.cancel();
-    _discoveryTimer = Timer(_discoveryTimeout, _stopDiscovery);
+    _discoveryTimer = Timer(_discoveryTimeout, () {
+      _stopDiscovery();
+      setState(() => hasSearched = true);
+    });
 
-    // 1. Classic Discovery (HC-05)
+    // Classic Discovery (HC-05 / Audio)
     _classicSubscription = classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
-      Utils.instance.printLogs(_tag, "Classic: ${r.device.name} [${r.device.address}]");
       _addDevice(DiscoveredDevice(
         name: r.device.name ?? "Unknown Classic",
         address: r.device.address,
@@ -133,20 +155,15 @@ class _ClientPageState extends State<ClientPage> {
         isBle: false,
         device: r.device,
       ));
-
-      if (r.device.name == _targetDeviceName) {
-        _stopDiscovery();
-        _connectToClassic(r.device);
-      }
     });
 
-    // 2. BLE Scan (iPhones, Sensors)
+    // BLE Scan
     _bleSubscription = ble.FlutterBluePlus.onScanResults.listen((scanResults) {
       for (ble.ScanResult r in scanResults) {
-        String name = r.advertisementData.advName.isNotEmpty 
-            ? r.advertisementData.advName 
+        String name = r.advertisementData.advName.isNotEmpty
+            ? r.advertisementData.advName
             : (r.device.platformName.isNotEmpty ? r.device.platformName : "Unknown BLE");
-            
+
         _addDevice(DiscoveredDevice(
           name: name,
           address: r.device.remoteId.toString(),
@@ -180,44 +197,52 @@ class _ClientPageState extends State<ClientPage> {
     setState(() => isDiscovering = false);
   }
 
-  void _connectToHC05() async {
-    classic.BluetoothState state = await classic.FlutterBluetoothSerial.instance.state;
-    if (state != classic.BluetoothState.STATE_ON) {
-      await classic.FlutterBluetoothSerial.instance.requestEnable();
-      return;
-    }
+  // --- 3. Connection & Data received ---
+  void _onDeviceTap(DiscoveredDevice d) {
+    if (isConnecting || isConnected) return; // Prevent multiple connections
 
-    setState(() => isConnecting = true);
+    _stopDiscovery(); // Stop scan on tap
 
-    try {
-      List<classic.BluetoothDevice> bonded = await classic.FlutterBluetoothSerial.instance.getBondedDevices();
-      classic.BluetoothDevice? target = bonded.where((d) => d.name == _targetDeviceName).firstOrNull;
-
-      if (target != null) {
-        _connectToClassic(target);
-      } else {
-        setState(() => isConnecting = false);
-        _startDiscovery();
-      }
-    } catch (e) {
-      Utils.instance.printLogs(_tag, "Error: $e");
-      setState(() => isConnecting = false);
+    if (!d.isBle) {
+      _connectToClassic(d.device as classic.BluetoothDevice);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("BLE connection requires GATT implementation."))
+      );
     }
   }
 
-  void _connectToClassic(classic.BluetoothDevice device) async {
-    _stopDiscovery();
-    setState(() => isConnecting = true);
+  Future<void> _connectToClassic(classic.BluetoothDevice device) async {
+    setState(() {
+      isConnecting = true;
+      connectedDeviceName = device.name;
+    });
+
     try {
-      connection = await classic.BluetoothConnection.toAddress(device.address);
-      connection!.input!.listen((data) {
+      // Step 3a: Ensure bonding for HC-05 / Audio devices
+      if (!device.isBonded) {
+        bool? bonded = await classic.FlutterBluetoothSerial.instance.bondDeviceAtAddress(device.address);
+        if (bonded != true) throw Exception("Bonding failed");
+      }
+
+      // Step 3b: Connect via SPP
+      _connection = await classic.BluetoothConnection.toAddress(device.address);
+
+      _connection!.input!.listen((data) {
         setState(() {
           _receivedData += utf8.decode(data);
-          if (_receivedData.length > 500) _receivedData = _receivedData.substring(_receivedData.length - 500);
+          // Limit terminal size
+          if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
         });
-      }).onDone(() => setState(() => connection = null));
+      }).onDone(() {
+        setState(() {
+          _connection = null;
+          connectedDeviceName = null;
+        });
+      });
     } catch (e) {
-      Utils.instance.printLogs(_tag, "Classic Conn Error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to connect: $e")));
+      setState(() => connectedDeviceName = null);
     } finally {
       setState(() => isConnecting = false);
     }
@@ -225,52 +250,120 @@ class _ClientPageState extends State<ClientPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [if (isDiscovering) const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(strokeWidth: 2)))]
-      ),
-      body: Column(
-        children: [
-          ListTile(
-            title: Text(isConnected ? "Connected to $_targetDeviceName" : "Disconnected"),
-            trailing: isConnecting ? const CircularProgressIndicator() : ElevatedButton(
-              onPressed: isConnected ? () => connection?.dispose() : _connectToHC05,
-              child: Text(isConnected ? "Disconnect" : "Connect"),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          ),
+          body: Column(
+            children: [
+              _buildStatusBar(),
+              if (isDiscovering) const LinearProgressIndicator(),
+              Expanded(
+                child: isConnected ? _buildDataView() : _buildScanView(),
+              ),
+            ],
+          ),
+        ),
+        // Requirement: Show the connecting process
+        if (isConnecting)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text("Connecting...", style: TextStyle(color: Colors.white, fontSize: 18, decoration: TextDecoration.none)),
+                ],
+              ),
             ),
           ),
-          if (results.isNotEmpty) ...[
-            const Divider(),
-            const Text("Discovered (Classic & BLE):", style: TextStyle(fontWeight: FontWeight.bold)),
-            Expanded(
-              child: ListView.builder(
-                itemCount: results.length,
-                itemBuilder: (context, i) {
-                  final d = results[i];
-                  return ListTile(
-                    leading: Icon(Icons.bluetooth, color: d.isBle ? Colors.green : Colors.blue),
-                    title: Text(d.name),
-                    subtitle: Text("${d.address} | ${d.isBle ? 'BLE' : 'Classic'}"),
-                    trailing: Text("${d.rssi} dBm"),
-                    onTap: d.isBle ? null : () => _connectToClassic(d.device),
-                  );
-                },
-              ),
-            )
-          ],
-          const Divider(),
-          const Text("Data:"),
-          Expanded(child: Container(width: double.infinity, color: Colors.black12, child: SingleChildScrollView(reverse: true, child: Text(_receivedData)))),
-          ElevatedButton(onPressed: () => setState(() => _receivedData = ""), child: const Text("Clear")),
+      ],
+    );
+  }
+
+  Widget _buildStatusBar() {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              isConnected
+                  ? "Connected to: $connectedDeviceName"
+                  : "Status: Disconnected",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            // Requirement: While discovering, "Scan" button is disabled
+            onPressed: (isDiscovering || isConnecting)
+                ? null
+                : (isConnected ? () => _connection?.dispose() : _startDiscovery),
+            child: Text(isConnected ? "Disconnect" : (isDiscovering ? "Scanning..." : "Scan")),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildScanView() {
+    // Requirement: if after 30 seconds no device, show "No device found"
+    if (results.isEmpty && !isDiscovering && hasSearched) {
+      return const Center(child: Text("No device found", style: TextStyle(color: Colors.grey, fontSize: 16)));
+    }
+
+    return ListView.builder(
+      itemCount: results.length,
+      itemBuilder: (context, i) {
+        final d = results[i];
+        return ListTile(
+          leading: Icon(d.isBle ? Icons.bluetooth_audio : Icons.bluetooth),
+          title: Text(d.name),
+          subtitle: Text("${d.address} | ${d.rssi} dBm"),
+          onTap: () => _onDeviceTap(d),
+        );
+      },
+    );
+  }
+
+  Widget _buildDataView() {
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(8),
+            width: double.infinity,
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
+            child: SingleChildScrollView(
+              reverse: true,
+              child: Text(
+                _receivedData.isEmpty ? "> Waiting for data..." : _receivedData,
+                style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace'),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: ElevatedButton(
+            onPressed: () => setState(() => _receivedData = ""),
+            child: const Text("Clear Terminal"),
+          ),
+        )
+      ],
     );
   }
 
   @override
   void dispose() {
     _stopDiscovery();
-    connection?.dispose();
+    _connection?.dispose();
     super.dispose();
   }
 }
