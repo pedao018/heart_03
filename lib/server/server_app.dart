@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_ble_peripheral/flutter_ble_peripheral.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -33,6 +35,8 @@ class _ServerPageState extends State<ServerPage> {
   bool _isAdvertising = false;
   String _status = "Idle";
   StreamSubscription? _stateSubscription;
+  Timer? _dataTimer;
+  int _currentHeartRate = 70;
 
   @override
   void initState() {
@@ -69,6 +73,7 @@ class _ServerPageState extends State<ServerPage> {
       final bool advertising = await blePeripheral.isAdvertising;
       if (advertising) {
         await blePeripheral.stop();
+        _dataTimer?.cancel();
         setState(() {
           _isAdvertising = false;
           _status = "Stopped Advertising";
@@ -81,10 +86,22 @@ class _ServerPageState extends State<ServerPage> {
           includeDeviceName: true,
         );
 
-        await blePeripheral.start(advertiseData: advertiseData);
+        // MANDATORY: Set connectable to true and timeout to 0 (infinite)
+        // Default timeout is 400ms, which is too short.
+        final AdvertiseSettings advertiseSettings = AdvertiseSettings(
+          connectable: true,
+          timeout: 0, 
+        );
+
+        await blePeripheral.start(
+          advertiseData: advertiseData,
+          advertiseSettings: advertiseSettings,
+        );
+        
+        _startDataSimulation();
         setState(() {
           _isAdvertising = true;
-          _status = "Advertising... (Visible to Client)";
+          _status = "Advertising... (Connectable)";
         });
       }
     } catch (e) {
@@ -94,9 +111,36 @@ class _ServerPageState extends State<ServerPage> {
     }
   }
 
+  void _startDataSimulation() {
+    _dataTimer?.cancel();
+    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      // Only attempt to send if a device is connected
+      bool connected = await blePeripheral.isConnected;
+      if (!connected) {
+        setState(() => _status = "Advertising... (Waiting for connection)");
+        return;
+      }
+
+      // Simulate heart rate fluctuation
+      _currentHeartRate = 65 + (timer.tick % 15);
+      final String data = "HR: $_currentHeartRate bpm";
+
+      try {
+        // Send data to connected clients
+        await blePeripheral.sendData(Uint8List.fromList(utf8.encode(data)));
+        setState(() {
+          _status = "Sending: $data";
+        });
+      } catch (e) {
+        debugPrint("Send error: $e");
+      }
+    });
+  }
+
   @override
   void dispose() {
     _stateSubscription?.cancel();
+    _dataTimer?.cancel();
     super.dispose();
   }
 

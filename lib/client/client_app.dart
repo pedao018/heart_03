@@ -52,15 +52,18 @@ class ClientPage extends StatefulWidget {
 }
 
 class _ClientPageState extends State<ClientPage> {
-  classic.BluetoothConnection? _connection;
+  classic.BluetoothConnection? _classicConnection;
+  ble.BluetoothDevice? _bleDevice;
   String _receivedData = "";
   bool isConnecting = false;
   bool isDiscovering = false;
   bool hasSearched = false;
   String? connectedDeviceName;
+  StreamSubscription? _bleDataSubscription;
 
-  final String _tag = "ClientPageState";
   final Duration _discoveryTimeout = const Duration(seconds: 30);
+  final String targetServiceUuid = 'bf27730d-860a-4e09-889c-2d8b6a9e0fe7';
+  final String _tag = "ClientPage";
 
   StreamSubscription<classic.BluetoothDiscoveryResult>? _classicSubscription;
   StreamSubscription<List<ble.ScanResult>>? _bleSubscription;
@@ -68,7 +71,7 @@ class _ClientPageState extends State<ClientPage> {
 
   List<DiscoveredDevice> results = [];
 
-  bool get isConnected => (_connection?.isConnected ?? false);
+  bool get isConnected => (_classicConnection?.isConnected ?? false) || (_bleDevice != null);
 
   @override
   void initState() {
@@ -81,6 +84,7 @@ class _ClientPageState extends State<ClientPage> {
     Map<Permission, PermissionStatus> statuses = await [
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
+      Permission.bluetoothAdvertise,
       Permission.location,
     ].request();
 
@@ -102,13 +106,13 @@ class _ClientPageState extends State<ClientPage> {
         content: const Text("You can't use the app if permission is not granted"),
         actions: [
           TextButton(
-            onPressed: () => SystemNavigator.pop(), // Exit App
+            onPressed: () => SystemNavigator.pop(),
             child: const Text("No"),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _checkPermissions(); // Request again
+              _checkPermissions();
             },
             child: const Text("Agree"),
           ),
@@ -146,7 +150,7 @@ class _ClientPageState extends State<ClientPage> {
       setState(() => hasSearched = true);
     });
 
-    // Classic Discovery (HC-05 / Audio)
+    // Classic Discovery
     _classicSubscription = classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
       _addDevice(DiscoveredDevice(
         name: r.device.name ?? "Unknown Classic",
@@ -178,6 +182,7 @@ class _ClientPageState extends State<ClientPage> {
   }
 
   void _addDevice(DiscoveredDevice device) {
+    if (!mounted) return;
     setState(() {
       final idx = results.indexWhere((d) => d.address == device.address);
       if (idx >= 0) {
@@ -189,26 +194,28 @@ class _ClientPageState extends State<ClientPage> {
     });
   }
 
-  void _stopDiscovery() {
+  void _stopDiscovery() async {
     _classicSubscription?.cancel();
     _bleSubscription?.cancel();
-    ble.FlutterBluePlus.stopScan();
+    
+    // Crucial: Stop BLE Scan
+    await ble.FlutterBluePlus.stopScan().catchError((_) {});
+    
+    // Crucial: Stop Classic Discovery
+    await classic.FlutterBluetoothSerial.instance.cancelDiscovery().catchError((_) {});
+    
     _discoveryTimer?.cancel();
-    setState(() => isDiscovering = false);
+    if (mounted) setState(() => isDiscovering = false);
   }
 
-  // --- 3. Connection & Data received ---
   void _onDeviceTap(DiscoveredDevice d) {
-    if (isConnecting || isConnected) return; // Prevent multiple connections
-
-    _stopDiscovery(); // Stop scan on tap
+    if (isConnecting || isConnected) return;
+    _stopDiscovery();
 
     if (!d.isBle) {
       _connectToClassic(d.device as classic.BluetoothDevice);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("BLE connection requires GATT implementation."))
-      );
+      _connectToBle(d.device as ble.BluetoothDevice);
     }
   }
 
@@ -219,33 +226,150 @@ class _ClientPageState extends State<ClientPage> {
     });
 
     try {
-      // Step 3a: Ensure bonding for HC-05 / Audio devices
       if (!device.isBonded) {
         bool? bonded = await classic.FlutterBluetoothSerial.instance.bondDeviceAtAddress(device.address);
         if (bonded != true) throw Exception("Bonding failed");
       }
 
-      // Step 3b: Connect via SPP
-      _connection = await classic.BluetoothConnection.toAddress(device.address);
+      _classicConnection = await classic.BluetoothConnection.toAddress(device.address);
 
-      _connection!.input!.listen((data) {
-        setState(() {
-          _receivedData += utf8.decode(data);
-          // Limit terminal size
-          if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
-        });
+      _classicConnection!.input!.listen((data) {
+        if (mounted) {
+          setState(() {
+            _receivedData += utf8.decode(data);
+            if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
+          });
+        }
       }).onDone(() {
-        setState(() {
-          _connection = null;
-          connectedDeviceName = null;
-        });
+        if (mounted) {
+          setState(() {
+            _classicConnection = null;
+            connectedDeviceName = null;
+          });
+        }
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to connect: $e")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to connect: $e")));
       setState(() => connectedDeviceName = null);
     } finally {
-      setState(() => isConnecting = false);
+      if (mounted) setState(() => isConnecting = false);
     }
+  }
+
+  Future<void> _connectToBle(ble.BluetoothDevice device) async {
+    Utils.instance.printLogs(_tag,"_connectToBle: ${device.remoteId}");
+    setState(() {
+      isConnecting = true;
+      connectedDeviceName = device.platformName.isEmpty ? "Unknown BLE" : device.platformName;
+    });
+
+    try {
+      // 1. Stabilization delay
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      // 2. Connect with retry loop
+      bool success = false;
+      int attempt = 0;
+      while (attempt < 2 && !success) {
+        try {
+          Utils.instance.printLogs(_tag, "Connection Attempt ${attempt + 1}");
+          bool useAutoConnect = (attempt == 1);
+          
+          await device.connect(
+            license: ble.License.free, 
+            autoConnect: useAutoConnect,
+            mtu: useAutoConnect ? null : 512,
+            timeout: const Duration(seconds: 15),
+          );
+
+          // If autoConnect is true, connect() returns immediately. We must wait.
+          if (useAutoConnect) {
+            Utils.instance.printLogs(_tag, "Waiting for connection to finalize...");
+            await device.connectionState
+                .where((s) => s == ble.BluetoothConnectionState.connected)
+                .first
+                .timeout(const Duration(seconds: 15));
+          }
+          
+          success = true;
+        } catch (e) {
+          attempt++;
+          Utils.instance.printLogs(_tag, "Attempt $attempt failed: $e");
+          if (attempt >= 2) rethrow;
+          await device.disconnect().catchError((_) {});
+          await Future.delayed(const Duration(seconds: 2));
+        }
+      }
+
+      Utils.instance.printLogs(_tag, "Connected successfully. Discovering services...");
+      await Future.delayed(const Duration(milliseconds: 1000)); 
+
+      // 3. Discover services and subscribe
+      List<ble.BluetoothService> services = await device.discoverServices();
+      bool serviceFound = false;
+      for (var service in services) {
+        if (service.uuid.toString().toLowerCase() == targetServiceUuid.toLowerCase()) {
+          serviceFound = true;
+          for (var char in service.characteristics) {
+            if (char.properties.notify || char.properties.indicate) {
+              await char.setNotifyValue(true);
+              _bleDataSubscription?.cancel();
+              _bleDataSubscription = char.lastValueStream.listen((value) {
+                if (mounted) {
+                  setState(() {
+                    String decoded = utf8.decode(value);
+                    _receivedData += "$decoded\n";
+                    if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
+                  });
+                }
+              });
+            }
+          }
+        }
+      }
+
+      if (!serviceFound && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Heart Service not found on Server device.")));
+      }
+
+      setState(() {
+        _bleDevice = device;
+      });
+
+      device.connectionState.listen((state) {
+        if (state == ble.BluetoothConnectionState.disconnected && mounted) {
+          setState(() {
+            _bleDevice = null;
+            connectedDeviceName = null;
+            _bleDataSubscription?.cancel();
+          });
+        }
+      });
+
+    } catch (e) {
+      if (mounted) {
+        Utils.instance.printLogs(_tag, "Final error: $e");
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("BLE connection failed: $e")));
+        setState(() => connectedDeviceName = null);
+      }
+    } finally {
+      if (mounted) setState(() => isConnecting = false);
+    }
+  }
+
+  void _disconnect() async {
+    if (_classicConnection != null) {
+      _classicConnection!.dispose(); 
+      setState(() => _classicConnection = null);
+    }
+    if (_bleDevice != null) {
+      await _bleDevice!.disconnect();
+      setState(() {
+        _bleDevice = null;
+        _bleDataSubscription?.cancel();
+      });
+    }
+    setState(() => connectedDeviceName = null);
   }
 
   @override
@@ -267,7 +391,6 @@ class _ClientPageState extends State<ClientPage> {
             ],
           ),
         ),
-        // Requirement: Show the connecting process
         if (isConnecting)
           Container(
             color: Colors.black54,
@@ -300,10 +423,9 @@ class _ClientPageState extends State<ClientPage> {
             ),
           ),
           ElevatedButton(
-            // Requirement: While discovering, "Scan" button is disabled
             onPressed: (isDiscovering || isConnecting)
                 ? null
-                : (isConnected ? () => _connection?.dispose() : _startDiscovery),
+                : (isConnected ? _disconnect : _startDiscovery),
             child: Text(isConnected ? "Disconnect" : (isDiscovering ? "Scanning..." : "Scan")),
           ),
         ],
@@ -312,7 +434,6 @@ class _ClientPageState extends State<ClientPage> {
   }
 
   Widget _buildScanView() {
-    // Requirement: if after 30 seconds no device, show "No device found"
     if (results.isEmpty && !isDiscovering && hasSearched) {
       return const Center(child: Text("No device found", style: TextStyle(color: Colors.grey, fontSize: 16)));
     }
@@ -363,7 +484,9 @@ class _ClientPageState extends State<ClientPage> {
   @override
   void dispose() {
     _stopDiscovery();
-    _connection?.dispose();
+    _classicConnection?.dispose();
+    _bleDevice?.disconnect();
+    _bleDataSubscription?.cancel();
     super.dispose();
   }
 }
