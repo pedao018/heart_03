@@ -176,13 +176,11 @@ class _ClientPageState extends State<ClientPage> {
         device.address.toUpperCase() == _targetDeviceAddress.toUpperCase()) {
       Utils.instance.printLogs(_tag, "_addDevice detected target -> auto connect");
       _onDeviceTap(device);
-      return; // Stop here if we are connecting
+      return; // Stop here if connecting
     }
 
-    // 2. Your filter for the UI list
     if (device.isBle) return;
 
-    // 3. Normal list update logic
     setState(() {
       final idx = results.indexWhere((d) => d.address == device.address);
       if (idx >= 0) {
@@ -198,10 +196,10 @@ class _ClientPageState extends State<ClientPage> {
     _classicSubscription?.cancel();
     _bleSubscription?.cancel();
 
-    // Crucial: Stop BLE Scan
+    // Stop BLE Scan
     await ble.FlutterBluePlus.stopScan().catchError((_) {});
 
-    // Crucial: Stop Classic Discovery
+    // Stop Classic Discovery
     await classic.FlutterBluetoothSerial.instance.cancelDiscovery().catchError((_) {});
 
     _discoveryTimer?.cancel();
@@ -286,7 +284,7 @@ class _ClientPageState extends State<ClientPage> {
             timeout: const Duration(seconds: 15),
           );
 
-          // If autoConnect is true, connect() returns immediately. We must wait.
+          // If autoConnect is true, connect() returns immediately. Must wait.
           if (useAutoConnect) {
             Utils.instance.printLogs(_tag, "Waiting for connection to finalize...");
             await device.connectionState
