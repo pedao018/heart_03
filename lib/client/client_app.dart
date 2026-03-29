@@ -236,7 +236,9 @@ class _ClientPageState extends State<ClientPage> {
       _classicConnection!.input!.listen((data) {
         if (mounted) {
           setState(() {
-            _receivedData += utf8.decode(data);
+            String resultDecode = utf8.decode(data);
+            Utils.instance.printLogs(_tag,"_connectToClassic: $data . resultDecode= $resultDecode");
+            _receivedData += resultDecode;
             if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
           });
         }
@@ -443,7 +445,7 @@ class _ClientPageState extends State<ClientPage> {
       itemBuilder: (context, i) {
         final d = results[i];
         return ListTile(
-          leading: Icon(d.isBle ? Icons.bluetooth_audio : Icons.bluetooth),
+          leading: Icon(Icons.bluetooth, color: d.isBle ? Colors.green : Colors.blue),
           title: Text(d.name),
           subtitle: Text("${d.address} | ${d.rssi} dBm"),
           onTap: () => _onDeviceTap(d),
