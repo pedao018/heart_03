@@ -43,7 +43,7 @@ class ClientPage extends StatefulWidget {
   State<ClientPage> createState() => _ClientPageState();
 }
 
-class _ClientPageState extends State<ClientPage> {
+class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateMixin {
   classic.BluetoothConnection? _classicConnection;
   ble.BluetoothDevice? _bleDevice;
   String _receivedData = "";
@@ -56,6 +56,8 @@ class _ClientPageState extends State<ClientPage> {
   final Duration _discoveryTimeout = const Duration(seconds: 30);
   final String targetServiceUuid = 'bf27730d-860a-4e09-889c-2d8b6a9e0fe7';
   final String _tag = "ClientPage";
+
+  // Static Name, Address -> auto connect targets
   final String _targetDeviceName = "DESKTOP-5VPL89H";
   final String _targetDeviceAddress = "E8:48:B8:C8:20:00";
 
@@ -67,9 +69,21 @@ class _ClientPageState extends State<ClientPage> {
 
   bool get isConnected => (_classicConnection?.isConnected ?? false) || (_bleDevice != null);
 
+  // Heart Rate Animation & Data
+  int? _currentBpm;
+  late AnimationController _heartController;
+  late Animation<double> _heartAnimation;
+
   @override
   void initState() {
     super.initState();
+    _heartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _heartAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(parent: _heartController, curve: Curves.easeInOut),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkPermissions());
   }
 
@@ -143,10 +157,12 @@ class _ClientPageState extends State<ClientPage> {
 
     // Classic Discovery
     _classicSubscription = classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
+      // Full detail logging for Classic
       Utils.instance.printLogs(
         _tag,
-        "_startDiscovery common: Name: ${r.device.name}, Address: ${r.device.address}, RSSI: ${r.rssi}, Type: ${r.device.type}",
+        "_startDiscovery common: Name: ${r.device.name}, Address: ${r.device.address}, RSSI: ${r.rssi}, Type: ${r.device.type}, BondState: ${r.device.bondState}",
       );
+
       _addDevice(
         DiscoveredDevice(name: r.device.name ?? "Unknown Classic", address: r.device.address, rssi: r.rssi, isBle: false, device: r.device),
       );
@@ -158,7 +174,13 @@ class _ClientPageState extends State<ClientPage> {
         String name = r.advertisementData.advName.isNotEmpty
             ? r.advertisementData.advName
             : (r.device.platformName.isNotEmpty ? r.device.platformName : "Unknown BLE");
-        Utils.instance.printLogs(_tag, "_startDiscovery BLE: ${r}");
+
+        // Full detail logging for BLE
+        Utils.instance.printLogs(
+          _tag,
+          "_startDiscovery BLE: Device: ${r.device.remoteId}, Name: $name, RSSI: ${r.rssi}, Services: ${r.advertisementData.serviceUuids}",
+        );
+
         _addDevice(DiscoveredDevice(name: name, address: r.device.remoteId.toString(), rssi: r.rssi, isBle: true, device: r.device));
       }
     });
@@ -176,9 +198,10 @@ class _ClientPageState extends State<ClientPage> {
         device.address.toUpperCase() == _targetDeviceAddress.toUpperCase()) {
       Utils.instance.printLogs(_tag, "_addDevice detected target -> auto connect");
       _onDeviceTap(device);
-      return; // Stop here if connecting
+      return;
     }
 
+    // Requirement: Skip BLE from list
     if (device.isBle) return;
 
     setState(() {
@@ -196,10 +219,7 @@ class _ClientPageState extends State<ClientPage> {
     _classicSubscription?.cancel();
     _bleSubscription?.cancel();
 
-    // Stop BLE Scan
     await ble.FlutterBluePlus.stopScan().catchError((_) {});
-
-    // Stop Classic Discovery
     await classic.FlutterBluetoothSerial.instance.cancelDiscovery().catchError((_) {});
 
     _discoveryTimer?.cancel();
@@ -214,6 +234,25 @@ class _ClientPageState extends State<ClientPage> {
       _connectToClassic(d.device as classic.BluetoothDevice);
     } else {
       _connectToBle(d.device as ble.BluetoothDevice);
+    }
+  }
+
+  void _updateBpmFromData(String data) {
+    final match = RegExp(r'BPM\s*:\s*(\d+)').firstMatch(data);
+    if (match != null) {
+      final bpmStr = match.group(1);
+      if (bpmStr != null) {
+        final bpm = int.tryParse(bpmStr);
+        if (bpm != null) {
+          setState(() {
+            _currentBpm = bpm;
+            // Animation logic
+            bool isDanger = bpm >= 100;
+            _heartController.duration = Duration(milliseconds: isDanger ? 300 : 800);
+            _heartController.repeat(reverse: true);
+          });
+        }
+      }
     }
   }
 
@@ -237,6 +276,7 @@ class _ClientPageState extends State<ClientPage> {
               setState(() {
                 String resultDecode = utf8.decode(data);
                 Utils.instance.printLogs(_tag, "_connectToClassic: $data . resultDecode= $resultDecode");
+                _updateBpmFromData(resultDecode);
                 _receivedData += resultDecode;
                 if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
               });
@@ -247,6 +287,7 @@ class _ClientPageState extends State<ClientPage> {
               setState(() {
                 _classicConnection = null;
                 connectedDeviceName = null;
+                _currentBpm = null;
               });
             }
           });
@@ -266,10 +307,10 @@ class _ClientPageState extends State<ClientPage> {
     });
 
     try {
-      // 1. Stabilization delay
-      await Future.delayed(const Duration(milliseconds: 1000));
+      // Settle delay
+      await Future.delayed(const Duration(milliseconds: 1500));
 
-      // 2. Connect with retry loop
+      // Connect loop
       bool success = false;
       int attempt = 0;
       while (attempt < 2 && !success) {
@@ -284,13 +325,13 @@ class _ClientPageState extends State<ClientPage> {
             timeout: const Duration(seconds: 15),
           );
 
-          // If autoConnect is true, connect() returns immediately. Must wait.
+          // Critical fix: Wait for handshake to finish if autoConnect is true
           if (useAutoConnect) {
             Utils.instance.printLogs(_tag, "Waiting for connection to finalize...");
             await device.connectionState
                 .where((s) => s == ble.BluetoothConnectionState.connected)
                 .first
-                .timeout(const Duration(seconds: 15));
+                .timeout(const Duration(seconds: 20));
           }
 
           success = true;
@@ -304,9 +345,9 @@ class _ClientPageState extends State<ClientPage> {
       }
 
       Utils.instance.printLogs(_tag, "Connected successfully. Discovering services...");
-      await Future.delayed(const Duration(milliseconds: 1000));
+      await Future.delayed(const Duration(milliseconds: 1500));
 
-      // 3. Discover services and subscribe
+      // Discover and subscribe
       List<ble.BluetoothService> services = await device.discoverServices();
       bool serviceFound = false;
       for (var service in services) {
@@ -320,6 +361,7 @@ class _ClientPageState extends State<ClientPage> {
                 if (mounted) {
                   setState(() {
                     String decoded = utf8.decode(value);
+                    _updateBpmFromData(decoded);
                     _receivedData += "$decoded\n";
                     if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
                   });
@@ -343,6 +385,7 @@ class _ClientPageState extends State<ClientPage> {
           setState(() {
             _bleDevice = null;
             connectedDeviceName = null;
+            _currentBpm = null;
             _bleDataSubscription?.cancel();
           });
         }
@@ -370,7 +413,10 @@ class _ClientPageState extends State<ClientPage> {
         _bleDataSubscription?.cancel();
       });
     }
-    setState(() => connectedDeviceName = null);
+    setState(() {
+      connectedDeviceName = null;
+      _currentBpm = null;
+    });
   }
 
   @override
@@ -450,28 +496,64 @@ class _ClientPageState extends State<ClientPage> {
   }
 
   Widget _buildDataView() {
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(8),
-            width: double.infinity,
-            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
-            child: SingleChildScrollView(
-              reverse: true,
-              child: Text(
-                _receivedData.isEmpty ? "> Waiting for data..." : _receivedData,
-                style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace'),
+    bool isDanger = (_currentBpm ?? 0) >= 100;
+    Color bgColor = isDanger ? Colors.red.shade50 : Colors.green.shade50;
+
+    return Container(
+      color: bgColor,
+      child: Column(
+        children: [
+          // Heart Rate Visual Section
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 30),
+            child: Column(
+              children: [
+                ScaleTransition(
+                  scale: _heartAnimation,
+                  child: Icon(
+                    Icons.favorite,
+                    color: isDanger ? Colors.red : Colors.green,
+                    size: 80,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "BPM",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  _currentBpm?.toString() ?? "--",
+                  style: TextStyle(
+                    fontSize: 60,
+                    fontWeight: FontWeight.bold,
+                    color: isDanger ? Colors.red : Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Terminal Section
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.all(8),
+              width: double.infinity,
+              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Text(
+                  _receivedData.isEmpty ? "> Waiting for data..." : _receivedData,
+                  style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace'),
+                ),
               ),
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: ElevatedButton(onPressed: () => setState(() => _receivedData = ""), child: const Text("Clear Terminal")),
-        ),
-      ],
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton(onPressed: () => setState(() => _receivedData = ""), child: const Text("Clear Terminal")),
+          ),
+        ],
+      ),
     );
   }
 
@@ -481,6 +563,7 @@ class _ClientPageState extends State<ClientPage> {
     _classicConnection?.dispose();
     _bleDevice?.disconnect();
     _bleDataSubscription?.cancel();
+    _heartController.dispose();
     super.dispose();
   }
 }
