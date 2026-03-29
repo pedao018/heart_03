@@ -40,3 +40,14 @@ rootProject.allprojects {
         mavenCentral()
     }
 }
+
+
+- Fix kotlin  flutter_ble_peripheral: ^2.1.0 :
+  gradle.properties -> kotlin.incremental=false
+  <img width="867" height="557" alt="image" src="https://github.com/user-attachments/assets/50b78ca6-217b-477e-84a2-49511cfe91dc" />
+
+- Fix   flutter_blue_plus: ^2.2.1 android: 
+  compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
