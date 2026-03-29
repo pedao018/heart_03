@@ -17,13 +17,7 @@ class DiscoveredDevice {
   final bool isBle;
   final dynamic device;
 
-  DiscoveredDevice({
-    required this.name,
-    required this.address,
-    required this.rssi,
-    required this.isBle,
-    required this.device,
-  });
+  DiscoveredDevice({required this.name, required this.address, required this.rssi, required this.isBle, required this.device});
 }
 
 class ClientApp extends StatelessWidget {
@@ -34,10 +28,7 @@ class ClientApp extends StatelessWidget {
     return MaterialApp(
       title: 'Bluetooth App',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true),
       home: const ClientPage(title: 'Bluetooth Scanner'),
     );
   }
@@ -45,6 +36,7 @@ class ClientApp extends StatelessWidget {
 
 class ClientPage extends StatefulWidget {
   const ClientPage({super.key, required this.title});
+
   final String title;
 
   @override
@@ -64,6 +56,8 @@ class _ClientPageState extends State<ClientPage> {
   final Duration _discoveryTimeout = const Duration(seconds: 30);
   final String targetServiceUuid = 'bf27730d-860a-4e09-889c-2d8b6a9e0fe7';
   final String _tag = "ClientPage";
+  final String _targetDeviceName = "DESKTOP-5VPL89H";
+  final String _targetDeviceAddress = "E8:48:B8:C8:20:00";
 
   StreamSubscription<classic.BluetoothDiscoveryResult>? _classicSubscription;
   StreamSubscription<List<ble.ScanResult>>? _bleSubscription;
@@ -105,10 +99,7 @@ class _ClientPageState extends State<ClientPage> {
         title: const Text("Permissions Required"),
         content: const Text("You can't use the app if permission is not granted"),
         actions: [
-          TextButton(
-            onPressed: () => SystemNavigator.pop(),
-            child: const Text("No"),
-          ),
+          TextButton(onPressed: () => SystemNavigator.pop(), child: const Text("No")),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
@@ -152,13 +143,13 @@ class _ClientPageState extends State<ClientPage> {
 
     // Classic Discovery
     _classicSubscription = classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
-      _addDevice(DiscoveredDevice(
-        name: r.device.name ?? "Unknown Classic",
-        address: r.device.address,
-        rssi: r.rssi,
-        isBle: false,
-        device: r.device,
-      ));
+      Utils.instance.printLogs(
+        _tag,
+        "_startDiscovery common: Name: ${r.device.name}, Address: ${r.device.address}, RSSI: ${r.rssi}, Type: ${r.device.type}",
+      );
+      _addDevice(
+        DiscoveredDevice(name: r.device.name ?? "Unknown Classic", address: r.device.address, rssi: r.rssi, isBle: false, device: r.device),
+      );
     });
 
     // BLE Scan
@@ -167,14 +158,8 @@ class _ClientPageState extends State<ClientPage> {
         String name = r.advertisementData.advName.isNotEmpty
             ? r.advertisementData.advName
             : (r.device.platformName.isNotEmpty ? r.device.platformName : "Unknown BLE");
-
-        _addDevice(DiscoveredDevice(
-          name: name,
-          address: r.device.remoteId.toString(),
-          rssi: r.rssi,
-          isBle: true,
-          device: r.device,
-        ));
+        Utils.instance.printLogs(_tag, "_startDiscovery BLE: ${r}");
+        _addDevice(DiscoveredDevice(name: name, address: r.device.remoteId.toString(), rssi: r.rssi, isBle: true, device: r.device));
       }
     });
 
@@ -183,6 +168,21 @@ class _ClientPageState extends State<ClientPage> {
 
   void _addDevice(DiscoveredDevice device) {
     if (!mounted) return;
+
+    // 1. Check for Auto-Connect FIRST (before any filters)
+    if (!isConnecting &&
+        !isConnected &&
+        device.name == _targetDeviceName &&
+        device.address.toUpperCase() == _targetDeviceAddress.toUpperCase()) {
+      Utils.instance.printLogs(_tag, "_addDevice detected target -> auto connect");
+      _onDeviceTap(device);
+      return; // Stop here if we are connecting
+    }
+
+    // 2. Your filter for the UI list
+    if (device.isBle) return;
+
+    // 3. Normal list update logic
     setState(() {
       final idx = results.indexWhere((d) => d.address == device.address);
       if (idx >= 0) {
@@ -197,13 +197,13 @@ class _ClientPageState extends State<ClientPage> {
   void _stopDiscovery() async {
     _classicSubscription?.cancel();
     _bleSubscription?.cancel();
-    
+
     // Crucial: Stop BLE Scan
     await ble.FlutterBluePlus.stopScan().catchError((_) {});
-    
+
     // Crucial: Stop Classic Discovery
     await classic.FlutterBluetoothSerial.instance.cancelDiscovery().catchError((_) {});
-    
+
     _discoveryTimer?.cancel();
     if (mounted) setState(() => isDiscovering = false);
   }
@@ -233,23 +233,25 @@ class _ClientPageState extends State<ClientPage> {
 
       _classicConnection = await classic.BluetoothConnection.toAddress(device.address);
 
-      _classicConnection!.input!.listen((data) {
-        if (mounted) {
-          setState(() {
-            String resultDecode = utf8.decode(data);
-            Utils.instance.printLogs(_tag,"_connectToClassic: $data . resultDecode= $resultDecode");
-            _receivedData += resultDecode;
-            if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
+      _classicConnection!.input!
+          .listen((data) {
+            if (mounted) {
+              setState(() {
+                String resultDecode = utf8.decode(data);
+                Utils.instance.printLogs(_tag, "_connectToClassic: $data . resultDecode= $resultDecode");
+                _receivedData += resultDecode;
+                if (_receivedData.length > 2000) _receivedData = _receivedData.substring(_receivedData.length - 2000);
+              });
+            }
+          })
+          .onDone(() {
+            if (mounted) {
+              setState(() {
+                _classicConnection = null;
+                connectedDeviceName = null;
+              });
+            }
           });
-        }
-      }).onDone(() {
-        if (mounted) {
-          setState(() {
-            _classicConnection = null;
-            connectedDeviceName = null;
-          });
-        }
-      });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to connect: $e")));
       setState(() => connectedDeviceName = null);
@@ -259,7 +261,7 @@ class _ClientPageState extends State<ClientPage> {
   }
 
   Future<void> _connectToBle(ble.BluetoothDevice device) async {
-    Utils.instance.printLogs(_tag,"_connectToBle: ${device.remoteId}");
+    Utils.instance.printLogs(_tag, "_connectToBle: ${device.remoteId}");
     setState(() {
       isConnecting = true;
       connectedDeviceName = device.platformName.isEmpty ? "Unknown BLE" : device.platformName;
@@ -276,9 +278,9 @@ class _ClientPageState extends State<ClientPage> {
         try {
           Utils.instance.printLogs(_tag, "Connection Attempt ${attempt + 1}");
           bool useAutoConnect = (attempt == 1);
-          
+
           await device.connect(
-            license: ble.License.free, 
+            license: ble.License.free,
             autoConnect: useAutoConnect,
             mtu: useAutoConnect ? null : 512,
             timeout: const Duration(seconds: 15),
@@ -292,7 +294,7 @@ class _ClientPageState extends State<ClientPage> {
                 .first
                 .timeout(const Duration(seconds: 15));
           }
-          
+
           success = true;
         } catch (e) {
           attempt++;
@@ -304,7 +306,7 @@ class _ClientPageState extends State<ClientPage> {
       }
 
       Utils.instance.printLogs(_tag, "Connected successfully. Discovering services...");
-      await Future.delayed(const Duration(milliseconds: 1000)); 
+      await Future.delayed(const Duration(milliseconds: 1000));
 
       // 3. Discover services and subscribe
       List<ble.BluetoothService> services = await device.discoverServices();
@@ -347,7 +349,6 @@ class _ClientPageState extends State<ClientPage> {
           });
         }
       });
-
     } catch (e) {
       if (mounted) {
         Utils.instance.printLogs(_tag, "Final error: $e");
@@ -361,7 +362,7 @@ class _ClientPageState extends State<ClientPage> {
 
   void _disconnect() async {
     if (_classicConnection != null) {
-      _classicConnection!.dispose(); 
+      _classicConnection!.dispose();
       setState(() => _classicConnection = null);
     }
     if (_bleDevice != null) {
@@ -379,17 +380,12 @@ class _ClientPageState extends State<ClientPage> {
     return Stack(
       children: [
         Scaffold(
-          appBar: AppBar(
-            title: Text(widget.title),
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          ),
+          appBar: AppBar(title: Text(widget.title), backgroundColor: Theme.of(context).colorScheme.primaryContainer),
           body: Column(
             children: [
               _buildStatusBar(),
               if (isDiscovering) const LinearProgressIndicator(),
-              Expanded(
-                child: isConnected ? _buildDataView() : _buildScanView(),
-              ),
+              Expanded(child: isConnected ? _buildDataView() : _buildScanView()),
             ],
           ),
         ),
@@ -402,7 +398,10 @@ class _ClientPageState extends State<ClientPage> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text("Connecting...", style: TextStyle(color: Colors.white, fontSize: 18, decoration: TextDecoration.none)),
+                  Text(
+                    "Connecting...",
+                    style: TextStyle(color: Colors.white, fontSize: 18, decoration: TextDecoration.none),
+                  ),
                 ],
               ),
             ),
@@ -418,16 +417,12 @@ class _ClientPageState extends State<ClientPage> {
         children: [
           Expanded(
             child: Text(
-              isConnected
-                  ? "Connected to: $connectedDeviceName"
-                  : "Status: Disconnected",
+              isConnected ? "Connected to: $connectedDeviceName" : "Status: Disconnected",
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           ElevatedButton(
-            onPressed: (isDiscovering || isConnecting)
-                ? null
-                : (isConnected ? _disconnect : _startDiscovery),
+            onPressed: (isDiscovering || isConnecting) ? null : (isConnected ? _disconnect : _startDiscovery),
             child: Text(isConnected ? "Disconnect" : (isDiscovering ? "Scanning..." : "Scan")),
           ),
         ],
@@ -437,7 +432,9 @@ class _ClientPageState extends State<ClientPage> {
 
   Widget _buildScanView() {
     if (results.isEmpty && !isDiscovering && hasSearched) {
-      return const Center(child: Text("No device found", style: TextStyle(color: Colors.grey, fontSize: 16)));
+      return const Center(
+        child: Text("No device found", style: TextStyle(color: Colors.grey, fontSize: 16)),
+      );
     }
 
     return ListView.builder(
@@ -474,11 +471,8 @@ class _ClientPageState extends State<ClientPage> {
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
-          child: ElevatedButton(
-            onPressed: () => setState(() => _receivedData = ""),
-            child: const Text("Clear Terminal"),
-          ),
-        )
+          child: ElevatedButton(onPressed: () => setState(() => _receivedData = ""), child: const Text("Clear Terminal")),
+        ),
       ],
     );
   }
