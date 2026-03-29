@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -198,8 +197,8 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
       return;
     }
 
-    // Requirement: Skip BLE from list
-    if (device.isBle) return;
+    // Skip BLE from list
+    // if (device.isBle) return;
 
     setState(() {
       final idx = results.indexWhere((d) => d.address == device.address);
@@ -224,13 +223,18 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   void _onDeviceTap(DiscoveredDevice d) {
+    final l10n = AppLocalizations.of(context)!;
+    if (d.isBle) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.bleConnectRestrict)));
+      return;
+    }
     if (isConnecting || isConnected) return;
     _stopDiscovery();
 
     if (!d.isBle) {
       _connectToClassic(d.device as classic.BluetoothDevice);
     } else {
-      _connectToBle(d.device as ble.BluetoothDevice);
+      // _connectToBle(d.device as ble.BluetoothDevice);
     }
   }
 
@@ -245,7 +249,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
             _currentBpm = bpm;
             // Animation logic
             bool isDanger = bpm >= 100;
-            _heartController.duration = Duration(milliseconds: isDanger ? 300 : 800);
+            _heartController.duration = Duration(milliseconds: isDanger ? 200 : 800);
             _heartController.repeat(reverse: true);
           });
         }
@@ -282,10 +286,12 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
           })
           .onDone(() {
             if (mounted) {
+              Utils.instance.printLogs(_tag, "_connectToClassic: disconected !");
               setState(() {
                 _classicConnection = null;
                 connectedDeviceName = null;
                 _currentBpm = null;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.disconnected)));
               });
             }
           });
@@ -541,7 +547,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
       itemBuilder: (context, i) {
         final d = results[i];
         return ListTile(
-          leading: const Icon(Icons.bluetooth),
+          leading: Icon(Icons.bluetooth, color: d.isBle ? Colors.green : Colors.blue),
           title: Text(d.name),
           subtitle: Text("${d.address} | ${d.rssi} dBm"),
           onTap: () => _onDeviceTap(d),
@@ -573,6 +579,10 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
                 Text(
                   _currentBpm?.toString() ?? "--",
                   style: TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: isDanger ? Colors.red : Colors.green),
+                ),
+                Text(
+                  isDanger ? l10n.bpmWarning : l10n.bpmNormal,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDanger ? Colors.red : Colors.green),
                 ),
               ],
             ),

@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// No description provided for @scannerTitle.
   ///
   /// In en, this message translates to:
-  /// **'Bluetooth Scanner'**
+  /// **'Bluetooth Heart Rate'**
   String get scannerTitle;
 
   /// No description provided for @permissionsTitle.
@@ -170,6 +170,12 @@ abstract class AppLocalizations {
   /// **'Status: Disconnected'**
   String get statusDisconnected;
 
+  /// No description provided for @disconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected !!!'**
+  String get disconnected;
+
   /// No description provided for @waitingForData.
   ///
   /// In en, this message translates to:
@@ -187,6 +193,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'BPM'**
   String get bpm;
+
+  /// No description provided for @bpmNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Status: Normal'**
+  String get bpmNormal;
+
+  /// No description provided for @bpmWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Status: Warning!'**
+  String get bpmWarning;
 
   /// No description provided for @serviceNotFound.
   ///
@@ -211,6 +229,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Member:'**
   String get memberTitle;
+
+  /// No description provided for @bleConnectRestrict.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE connection is restricted.'**
+  String get bleConnectRestrict;
 }
 
 class _AppLocalizationsDelegate

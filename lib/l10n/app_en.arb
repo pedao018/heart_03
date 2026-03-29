@@ -1,5 +1,5 @@
 {
-  "scannerTitle": "Bluetooth Scanner",
+  "scannerTitle": "Bluetooth Heart Rate",
   "permissionsTitle": "Permissions Required",
   "permissionsContent": "You can't use the app if permission is not granted",
   "no": "No",
@@ -18,9 +18,12 @@
     }
   },
   "statusDisconnected": "Status: Disconnected",
+  "disconnected": "Disconnected !!!",
   "waitingForData": "> Waiting for data...",
   "clearTerminal": "Clear Terminal",
   "bpm": "BPM",
+  "bpmNormal": "Status: Normal",
+  "bpmWarning": "Status: Warning!",
   "serviceNotFound": "Heart Service not found on Server device.",
   "bleConnectionFailed": "BLE connection failed: {error}",
   "@bleConnectionFailed": {
@@ -38,5 +41,6 @@
       }
     }
   },
-  "memberTitle": "Member:"
+  "memberTitle": "Member:",
+  "bleConnectRestrict": "BLE connection is restricted."
 }

@@ -1,5 +1,5 @@
 {
-  "scannerTitle": "Quét Bluetooth",
+  "scannerTitle": "Nhịp Tim Bluetooth",
   "permissionsTitle": "Yêu cầu quyền truy cập",
   "permissionsContent": "Bạn không thể sử dụng ứng dụng nếu không cấp quyền",
   "no": "Không",
@@ -18,9 +18,12 @@
     }
   },
   "statusDisconnected": "Trạng thái: Đã ngắt kết nối",
+  "disconnected": "Đã ngắt kết nối !!!",
   "waitingForData": "> Đang chờ dữ liệu...",
   "clearTerminal": "Xóa màn hình",
   "bpm": "BPM",
+  "bpmNormal": "Trạng thái: Bình thường",
+  "bpmWarning": "Trạng thái: Cảnh báo!",
   "serviceNotFound": "Không tìm thấy dịch vụ Heart trên máy chủ.",
   "bleConnectionFailed": "Kết nối BLE thất bại: {error}",
   "@bleConnectionFailed": {
@@ -38,5 +41,6 @@
       }
     }
   },
-  "memberTitle": "Danh sách thành viên:"
+  "memberTitle": "Danh sách thành viên:",
+  "bleConnectRestrict": "Kết nối với BLE bị hạn chế."
 }

@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get scannerTitle => 'Bluetooth Scanner';
+  String get scannerTitle => 'Bluetooth Heart Rate';
 
   @override
   String get permissionsTitle => 'Permissions Required';
@@ -48,6 +48,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusDisconnected => 'Status: Disconnected';
 
   @override
+  String get disconnected => 'Disconnected !!!';
+
+  @override
   String get waitingForData => '> Waiting for data...';
 
   @override
@@ -55,6 +58,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bpm => 'BPM';
+
+  @override
+  String get bpmNormal => 'Status: Normal';
+
+  @override
+  String get bpmWarning => 'Status: Warning!';
 
   @override
   String get serviceNotFound => 'Heart Service not found on Server device.';
@@ -71,4 +80,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get memberTitle => 'Member:';
+
+  @override
+  String get bleConnectRestrict => 'BLE connection is restricted.';
 }

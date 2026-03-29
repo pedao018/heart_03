@@ -9,7 +9,7 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
-  String get scannerTitle => 'Quét Bluetooth';
+  String get scannerTitle => 'Nhịp Tim Bluetooth';
 
   @override
   String get permissionsTitle => 'Yêu cầu quyền truy cập';
@@ -48,6 +48,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get statusDisconnected => 'Trạng thái: Đã ngắt kết nối';
 
   @override
+  String get disconnected => 'Đã ngắt kết nối !!!';
+
+  @override
   String get waitingForData => '> Đang chờ dữ liệu...';
 
   @override
@@ -55,6 +58,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get bpm => 'BPM';
+
+  @override
+  String get bpmNormal => 'Trạng thái: Bình thường';
+
+  @override
+  String get bpmWarning => 'Trạng thái: Cảnh báo!';
 
   @override
   String get serviceNotFound => 'Không tìm thấy dịch vụ Heart trên máy chủ.';
@@ -71,4 +80,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get memberTitle => 'Danh sách thành viên:';
+
+  @override
+  String get bleConnectRestrict => 'Kết nối với BLE bị hạn chế.';
 }
