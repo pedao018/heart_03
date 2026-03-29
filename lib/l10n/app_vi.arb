@@ -37,5 +37,6 @@
         "type": "String"
       }
     }
-  }
+  },
+  "memberTitle": "Danh sách thành viên:"
 }

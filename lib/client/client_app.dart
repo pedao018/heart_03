@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial_plus/flutter_bluetooth_serial_plus.dart' as classic;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
-import 'package:heart_03/l10n/app_localizations.dart';
 import 'package:heart_03/utils/utils.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:heart_03/l10n/app_localizations.dart';
 import 'package:heart_03/main.dart';
 
 class DiscoveredDevice {
@@ -71,16 +72,14 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   late AnimationController _heartController;
   late Animation<double> _heartAnimation;
 
+  // List member
+  final String _listMember = "- Mem A.\n- Mem B.\n- Mem C.";
+
   @override
   void initState() {
     super.initState();
-    _heartController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
-    _heartAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _heartController, curve: Curves.easeInOut),
-    );
+    _heartController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat(reverse: true);
+    _heartAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(CurvedAnimation(parent: _heartController, curve: Curves.easeInOut));
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkPermissions());
   }
 
@@ -429,19 +428,53 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
             title: Text(l10n.scannerTitle),
             backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             actions: [
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'en') {
-                    MyApp.of(context).setLocale(const Locale('en'));
-                  } else {
-                    MyApp.of(context).setLocale(const Locale('vi'));
-                  }
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset('assets/images/Logo_IUH.png', height: 80),
+                            const SizedBox(height: 16),
+                            const SizedBox(height: 8),
+                            Text(
+                              l10n.memberTitle,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              _listMember,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal),
+                            ),
+                            const Divider(height: 32),
+                            ListTile(
+                              leading: const Icon(Icons.language),
+                              title: const Text("English"),
+                              onTap: () {
+                                MyApp.of(context).setLocale(const Locale('en'));
+                                Navigator.pop(context);
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.language),
+                              title: const Text("Tiếng Việt"),
+                              onTap: () {
+                                MyApp.of(context).setLocale(const Locale('vi'));
+                                Navigator.pop(context);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
                 },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'en', child: Text('English')),
-                  const PopupMenuItem(value: 'vi', child: Text('Tiếng Việt')),
-                ],
-                icon: const Icon(Icons.language),
               ),
             ],
           ),
@@ -533,24 +566,13 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
               children: [
                 ScaleTransition(
                   scale: _heartAnimation,
-                  child: Icon(
-                    Icons.favorite,
-                    color: isDanger ? Colors.red : Colors.green,
-                    size: 80,
-                  ),
+                  child: Icon(Icons.favorite, color: isDanger ? Colors.red : Colors.green, size: 80),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  "BPM",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                Text(l10n.bpm, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 Text(
                   _currentBpm?.toString() ?? "--",
-                  style: TextStyle(
-                    fontSize: 60,
-                    fontWeight: FontWeight.bold,
-                    color: isDanger ? Colors.red : Colors.green,
-                  ),
+                  style: TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: isDanger ? Colors.red : Colors.green),
                 ),
               ],
             ),

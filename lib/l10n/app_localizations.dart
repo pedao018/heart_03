@@ -205,6 +205,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to connect: {error}'**
   String classicConnectionFailed(String error);
+
+  /// No description provided for @memberTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Member:'**
+  String get memberTitle;
 }
 
 class _AppLocalizationsDelegate

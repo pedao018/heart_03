@@ -37,5 +37,6 @@
         "type": "String"
       }
     }
-  }
+  },
+  "memberTitle": "Member:"
 }

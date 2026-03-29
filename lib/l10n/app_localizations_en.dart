@@ -68,4 +68,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String classicConnectionFailed(String error) {
     return 'Failed to connect: $error';
   }
+
+  @override
+  String get memberTitle => 'Member:';
 }

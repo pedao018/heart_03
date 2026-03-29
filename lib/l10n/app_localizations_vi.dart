@@ -68,4 +68,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String classicConnectionFailed(String error) {
     return 'Kết nối thất bại: $error';
   }
+
+  @override
+  String get memberTitle => 'Danh sách thành viên:';
 }
