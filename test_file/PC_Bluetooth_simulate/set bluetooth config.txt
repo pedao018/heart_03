@@ -1,0 +1,15 @@
+1. Set COM window
+Bluetooth Settings -> More Bluetooth options -> COM port -> Add
+
+2. Check COM info
+Device Manager → Ports (COM & LPT)
+
+3. Install python
+https://www.python.org/downloads/
+Tick ✅ Add Python to PATH
+
+python --version
+pip install pyserial 
+
+4. run 
+python bluetooth_send.py
