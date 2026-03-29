@@ -1,0 +1,41 @@
+{
+  "scannerTitle": "Quét Bluetooth",
+  "permissionsTitle": "Yêu cầu quyền truy cập",
+  "permissionsContent": "Bạn không thể sử dụng ứng dụng nếu không cấp quyền",
+  "no": "Không",
+  "agree": "Đồng ý",
+  "noDeviceFound": "Không tìm thấy thiết bị",
+  "scan": "Quét",
+  "scanning": "Đang quét...",
+  "disconnect": "Ngắt kết nối",
+  "connecting": "Đang kết nối...",
+  "connectedTo": "Đã kết nối với: {deviceName}",
+  "@connectedTo": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "statusDisconnected": "Trạng thái: Đã ngắt kết nối",
+  "waitingForData": "> Đang chờ dữ liệu...",
+  "clearTerminal": "Xóa màn hình",
+  "bpm": "BPM",
+  "serviceNotFound": "Không tìm thấy dịch vụ Heart trên máy chủ.",
+  "bleConnectionFailed": "Kết nối BLE thất bại: {error}",
+  "@bleConnectionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "classicConnectionFailed": "Kết nối thất bại: {error}",
+  "@classicConnectionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}

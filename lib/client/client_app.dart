@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial_plus/flutter_bluetooth_serial_plus.dart' as classic;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
+import 'package:heart_03/l10n/app_localizations.dart';
 import 'package:heart_03/utils/utils.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:heart_03/main.dart';
 
 class DiscoveredDevice {
   final String name;
@@ -25,12 +27,7 @@ class ClientApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Bluetooth App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true),
-      home: const ClientPage(title: 'Bluetooth Scanner'),
-    );
+    return const ClientPage(title: 'Bluetooth Scanner');
   }
 }
 
@@ -106,20 +103,21 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   void _showPermissionDialog() {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text("Permissions Required"),
-        content: const Text("You can't use the app if permission is not granted"),
+        title: Text(l10n.permissionsTitle),
+        content: Text(l10n.permissionsContent),
         actions: [
-          TextButton(onPressed: () => SystemNavigator.pop(), child: const Text("No")),
+          TextButton(onPressed: () => SystemNavigator.pop(), child: Text(l10n.no)),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               _checkPermissions();
             },
-            child: const Text("Agree"),
+            child: Text(l10n.agree),
           ),
         ],
       ),
@@ -257,6 +255,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   Future<void> _connectToClassic(classic.BluetoothDevice device) async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       isConnecting = true;
       connectedDeviceName = device.name;
@@ -292,7 +291,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
             }
           });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to connect: $e")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.classicConnectionFailed(e.toString()))));
       setState(() => connectedDeviceName = null);
     } finally {
       if (mounted) setState(() => isConnecting = false);
@@ -300,6 +299,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   Future<void> _connectToBle(ble.BluetoothDevice device) async {
+    final l10n = AppLocalizations.of(context)!;
     Utils.instance.printLogs(_tag, "_connectToBle: ${device.remoteId}");
     setState(() {
       isConnecting = true;
@@ -373,7 +373,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
       }
 
       if (!serviceFound && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Heart Service not found on Server device.")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.serviceNotFound)));
       }
 
       setState(() {
@@ -393,7 +393,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
     } catch (e) {
       if (mounted) {
         Utils.instance.printLogs(_tag, "Final error: $e");
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("BLE connection failed: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.bleConnectionFailed(e.toString()))));
         setState(() => connectedDeviceName = null);
       }
     } finally {
@@ -421,10 +421,30 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Stack(
       children: [
         Scaffold(
-          appBar: AppBar(title: Text(widget.title), backgroundColor: Theme.of(context).colorScheme.primaryContainer),
+          appBar: AppBar(
+            title: Text(l10n.scannerTitle),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            actions: [
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'en') {
+                    MyApp.of(context).setLocale(const Locale('en'));
+                  } else {
+                    MyApp.of(context).setLocale(const Locale('vi'));
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'en', child: Text('English')),
+                  const PopupMenuItem(value: 'vi', child: Text('Tiếng Việt')),
+                ],
+                icon: const Icon(Icons.language),
+              ),
+            ],
+          ),
           body: Column(
             children: [
               _buildStatusBar(),
@@ -436,15 +456,15 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
         if (isConnecting)
           Container(
             color: Colors.black54,
-            child: const Center(
+            child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
                   Text(
-                    "Connecting...",
-                    style: TextStyle(color: Colors.white, fontSize: 18, decoration: TextDecoration.none),
+                    l10n.connecting,
+                    style: const TextStyle(color: Colors.white, fontSize: 18, decoration: TextDecoration.none),
                   ),
                 ],
               ),
@@ -455,19 +475,20 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   Widget _buildStatusBar() {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.all(12.0),
       child: Row(
         children: [
           Expanded(
             child: Text(
-              isConnected ? "Connected to: $connectedDeviceName" : "Status: Disconnected",
+              isConnected ? l10n.connectedTo(connectedDeviceName ?? "Unknown") : l10n.statusDisconnected,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           ElevatedButton(
             onPressed: (isDiscovering || isConnecting) ? null : (isConnected ? _disconnect : _startDiscovery),
-            child: Text(isConnected ? "Disconnect" : (isDiscovering ? "Scanning..." : "Scan")),
+            child: Text(isConnected ? l10n.disconnect : (isDiscovering ? l10n.scanning : l10n.scan)),
           ),
         ],
       ),
@@ -475,9 +496,10 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   Widget _buildScanView() {
+    final l10n = AppLocalizations.of(context)!;
     if (results.isEmpty && !isDiscovering && hasSearched) {
-      return const Center(
-        child: Text("No device found", style: TextStyle(color: Colors.grey, fontSize: 16)),
+      return Center(
+        child: Text(l10n.noDeviceFound, style: const TextStyle(color: Colors.grey, fontSize: 16)),
       );
     }
 
@@ -486,7 +508,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
       itemBuilder: (context, i) {
         final d = results[i];
         return ListTile(
-          leading: Icon(Icons.bluetooth, color: d.isBle ? Colors.green : Colors.blue),
+          leading: const Icon(Icons.bluetooth),
           title: Text(d.name),
           subtitle: Text("${d.address} | ${d.rssi} dBm"),
           onTap: () => _onDeviceTap(d),
@@ -496,6 +518,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
   }
 
   Widget _buildDataView() {
+    final l10n = AppLocalizations.of(context)!;
     bool isDanger = (_currentBpm ?? 0) >= 100;
     Color bgColor = isDanger ? Colors.red.shade50 : Colors.green.shade50;
 
@@ -542,7 +565,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
               child: SingleChildScrollView(
                 reverse: true,
                 child: Text(
-                  _receivedData.isEmpty ? "> Waiting for data..." : _receivedData,
+                  _receivedData.isEmpty ? l10n.waitingForData : _receivedData,
                   style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace'),
                 ),
               ),
@@ -550,7 +573,7 @@ class _ClientPageState extends State<ClientPage> with SingleTickerProviderStateM
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: ElevatedButton(onPressed: () => setState(() => _receivedData = ""), child: const Text("Clear Terminal")),
+            child: ElevatedButton(onPressed: () => setState(() => _receivedData = ""), child: Text(l10n.clearTerminal)),
           ),
         ],
       ),

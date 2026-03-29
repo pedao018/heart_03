@@ -1,0 +1,41 @@
+{
+  "scannerTitle": "Bluetooth Scanner",
+  "permissionsTitle": "Permissions Required",
+  "permissionsContent": "You can't use the app if permission is not granted",
+  "no": "No",
+  "agree": "Agree",
+  "noDeviceFound": "No device found",
+  "scan": "Scan",
+  "scanning": "Scanning...",
+  "disconnect": "Disconnect",
+  "connecting": "Connecting...",
+  "connectedTo": "Connected to: {deviceName}",
+  "@connectedTo": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "statusDisconnected": "Status: Disconnected",
+  "waitingForData": "> Waiting for data...",
+  "clearTerminal": "Clear Terminal",
+  "bpm": "BPM",
+  "serviceNotFound": "Heart Service not found on Server device.",
+  "bleConnectionFailed": "BLE connection failed: {error}",
+  "@bleConnectionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "classicConnectionFailed": "Failed to connect: {error}",
+  "@classicConnectionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
+}
